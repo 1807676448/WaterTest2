@@ -94,7 +94,8 @@ targets:
         - RTE/_WaterTest2
         - ../App/Inc
       libList: []
-    excludeList: []
+    excludeList:
+      - <virtual_root>/Application/User/App/app_hc14.c
     toolchain: AC6
     toolchainConfigMap:
       AC5:
@@ -211,7 +212,7 @@ targets:
           c/cpp-compiler:
             language-c: c99
             language-cpp: c++11
-            optimization: level-0
+            optimization: level-fast
             warnings: ac5-like-warnings
           global:
             output-debug-info: enable
@@ -227,7 +228,7 @@ targets:
             - id: 1
               isChecked: true
               mem:
-                size: "0x50000"
+                size: "0x8000"
                 startAddr: "0x20000000"
               noInit: false
               tag: IRAM
@@ -236,7 +237,7 @@ targets:
               isChecked: true
               isStartup: true
               mem:
-                size: "0x100000"
+                size: "0x20000"
                 startAddr: "0x08000000"
               tag: IROM
         useCustomScatterFile: false

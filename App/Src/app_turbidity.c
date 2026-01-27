@@ -7,7 +7,7 @@
 // 分压比 = (R上 + R下) / R下。 
 // 例如：若要适配4.5V，建议将电压降至约3.0V。可用 10k(上) 和 20k(下)。
 // 系数 = (10+20)/20 = 1.5。请根据实际电路修改此值。
-#define TURBIDITY_DIVIDER_RATIO 1.0f 
+#define TURBIDITY_DIVIDER_RATIO 2.0f 
 
 static ADC_HandleTypeDef *turbidity_adc;
 
@@ -54,11 +54,14 @@ float Turbidity_Read_Voltage(void)
     return pin_voltage * TURBIDITY_DIVIDER_RATIO;
 }
 
-float Turbidity_Read_NTU(void)
+float Turbidity_Read_NTU(float water_temp)
 {
     float voltage = Turbidity_Read_Voltage();
+
+    // 温度补偿 (假设25℃为基准温度)
+    float temp_coefficient = -0.0192f * (water_temp - 25.0f);
     
-    float ntu = voltage * (-865.68f) + 3291.3f;  
+    float ntu = (voltage + temp_coefficient) * (-865.68f) + 3291.3f - 590.0f;  
 
     return ntu;
 }

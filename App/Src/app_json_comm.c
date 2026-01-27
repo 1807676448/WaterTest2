@@ -35,11 +35,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         // 为了可靠性，单纯存入buffer，主循环解析。这里以 \n 作为结束符示例，实际JSON可能不带回车。
         // 改进：一直累积直到 buffer 满或者特定结束条件。
         // 假设命令以 \n 结束
-        
+
         if (rx_index < COMM_RX_BUFFER_SIZE - 1)
         {
             rx_buffer[rx_index++] = rx_byte;
-            
+
             // 收到换行符，标记接收完成
             if (rx_byte == '\n')
             {
@@ -62,126 +62,31 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
 void Comm_Send_Sensor_Data(float ph, float tds, float turb, float w_temp, float a_temp, float a_hum, float pres, float asl)
 {
-    cJSON *root = cJSON_CreateObject();
-    if (root == NULL) return;
+    /* Buffer for JSON string. Ensure it's large enough for all data. */
+    char tx_buffer[256];
 
-    cJSON_AddNumberToObject(root, "device_id", COMM_DEVICE_ID);
-    
-    // 添加数据对象
-    cJSON *data = cJSON_CreateObject();
-    cJSON_AddNumberToObject(data, "ph", ph);
-    cJSON_AddNumberToObject(data, "tds", tds);
-    cJSON_AddNumberToObject(data, "turbidity", turb);
-    cJSON_AddNumberToObject(data, "water_temp", w_temp);
-    cJSON_AddNumberToObject(data, "air_temp", a_temp);
-    cJSON_AddNumberToObject(data, "humidity", a_hum);
-    cJSON_AddNumberToObject(data, "pressure", pres);
-    cJSON_AddNumberToObject(data, "altitude", asl);
+    /* Format the data into a JSON string */
+    int len = snprintf(tx_buffer, sizeof(tx_buffer),
+                       "{\"device_id\":%d,\"pH\":%.2f,\"TDS\":%.1f,\"Tur\":%.1f,\"Tem\":%.1f,\"air_temp\":%.1f,\"air_hum\":%.1f,\"pressure\":%.1f,\"altitude\":%.1f,\"device_id\":%d,\"status\":\"%s\"}\r\n",
+                       COMM_DEVICE_ID, ph, tds, turb, w_temp, a_temp, a_hum, pres, asl, COMM_DEVICE_ID, "Active");
 
-    cJSON_AddItemToObject(root, "data", data);
-
-    char *json_str = cJSON_PrintUnformatted(root);
-    if (json_str != NULL)
+    if (len > 0)
     {
-        // 发送数据，追加换行符
-        HAL_UART_Transmit(COMM_UART_HANDLE, (uint8_t *)json_str, strlen(json_str), 1000);
-        HAL_UART_Transmit(COMM_UART_HANDLE, (uint8_t *)"\r\n", 2, 100);
-        free(json_str); // 必须释放
+        /* Send JSON string via USART2 */
+        HAL_UART_Transmit(&huart2, (uint8_t *)tx_buffer, (uint16_t)len, 1000);
     }
-
-    cJSON_Delete(root);
 }
 
 // 辅助函数：发送简单的响应消息
-static void Comm_Send_Response(const char* status, const char* message)
+void Comm_Send_Response(const char *status)
 {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "device_id", COMM_DEVICE_ID);
-    cJSON_AddStringToObject(root, "status", status);
-    if(message != NULL)
-        cJSON_AddStringToObject(root, "message", message);
-    
-    char *json_str = cJSON_PrintUnformatted(root);
-    if (json_str != NULL) {
-        HAL_UART_Transmit(COMM_UART_HANDLE, (uint8_t *)json_str, strlen(json_str), 1000);
-        HAL_UART_Transmit(COMM_UART_HANDLE, (uint8_t *)"\r\n", 2, 100);
-        free(json_str);
-    }
-    cJSON_Delete(root);
-}
-
-void Comm_Process_Rx_Command(void)
-{
-    if (data_ready_flag)
+    char tx_buffer[64];
+    int len;
+    len = snprintf(tx_buffer, sizeof(tx_buffer),
+                   "{\"device_id\":%d,\"status\":\"%s\"}\r\n",
+                   COMM_DEVICE_ID, status);
+    if (len > 0)
     {
-        // 尝试解析JSON
-        cJSON *root = cJSON_Parse((char *)rx_buffer);
-        if (root != NULL)
-        {
-            cJSON *id_item = cJSON_GetObjectItem(root, "device_id");
-            cJSON *cmd_item = cJSON_GetObjectItem(root, "command");
-            cJSON *val_item = cJSON_GetObjectItem(root, "value");
-
-            if (cJSON_IsNumber(id_item) && id_item->valueint == COMM_DEVICE_ID)
-            {
-                if (cJSON_IsString(cmd_item))
-                {
-                    // 1. 重启设备
-                    if (strcmp(cmd_item->valuestring, "REBOOT") == 0)
-                    {
-                        Comm_Send_Response("OK", "Rebooting...");
-                        HAL_Delay(100);
-                        HAL_NVIC_SystemReset();
-                    }
-                    // 2. 设置上报时间间隔 (ms)
-                    else if (strcmp(cmd_item->valuestring, "SET_INTERVAL") == 0)
-                    {
-                        if (cJSON_IsNumber(val_item))
-                        {
-                            report_interval = val_item->valueint;
-                            if (report_interval < 100) report_interval = 100; // 最小限制
-                            Comm_Send_Response("OK", "Interval Updated");
-                        }
-                        else
-                        {
-                            Comm_Send_Response("ERROR", "Invalid Value");
-                        }
-                    }
-                    // 3. 设置 TDS 校准系数 K
-                    else if (strcmp(cmd_item->valuestring, "SET_TDS_K") == 0)
-                    {
-                        if (cJSON_IsNumber(val_item))
-                        {
-                            TDS_Set_K_Value((float)val_item->valuedouble);
-                            Comm_Send_Response("OK", "TDS K Value Updated");
-                        }
-                        else
-                        {
-                            Comm_Send_Response("ERROR", "Invalid Value");
-                        }
-                    }
-                    // 4. 获取设备状态
-                    else if (strcmp(cmd_item->valuestring, "GET_STATUS") == 0)
-                    {
-                        Comm_Send_Response("OK", "Running");
-                    }
-                    else
-                    {
-                        Comm_Send_Response("ERROR", "Unknown Command");
-                    }
-                }
-            }
-            cJSON_Delete(root);
-        }
-        else
-        {
-             // JSON 解析失败 (可选：打印错误信息)
-             // Comm_Send_Response("ERROR", "Invalid JSON");
-        }
-        
-        // 处理完毕，重置缓冲区
-        data_ready_flag = 0;
-        rx_index = 0;
-        memset(rx_buffer, 0, COMM_RX_BUFFER_SIZE);
+        HAL_UART_Transmit(COMM_UART_HANDLE, (uint8_t *)tx_buffer, (uint16_t)len, 1000);
     }
 }

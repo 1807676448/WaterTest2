@@ -1,4 +1,5 @@
 #include "app_ds18b20.h"
+#include "app_debug.h"
 
 /**************************************************************************************
  * 描  述 : 仅用于初始化：配置使DS18B20-DATA引脚变为开漏输出模式
@@ -79,15 +80,17 @@ static uint8_t DS18B20_Read_Bit(void)
 {
 	uint8_t dat;
 
-    /* Start Slot: 拉低 >1us (这里2us) */
+    __disable_irq();
+
+    /* Start Slot: 拉低 >1us */
 	DS18B20_DATA_OUT(GPIO_PIN_RESET);
 	HAL_Delay_Us(2);
 
 	/* Release: 释放总线(OD模式写1)，准备采样 */
 	DS18B20_DATA_OUT(GPIO_PIN_SET);
     
-    /* 等待数据稳定：采样点应在时隙开始后15us内
-       前面延时2us，这里再延时8-10us，总共~10-12us采样，满足时序 */
+    /* 等待数据稳定：采样点应在时隙开始后15us内 */
+    /* 之前的延时加上代码开销已经在数微秒，这里等待8us左右 */
     HAL_Delay_Us(8);
 
     /* 采样 */
@@ -95,6 +98,8 @@ static uint8_t DS18B20_Read_Bit(void)
 		dat = 1;
 	else
 		dat = 0;
+
+    __enable_irq();
 
 	/* 补齐时隙：读时隙至少60us */
 	HAL_Delay_Us(50);
@@ -136,18 +141,21 @@ void DS18B20_Write_Byte(uint8_t dat)
 		
 		if (testb) // 写1
 		{
+            __disable_irq();
             /* 拉低 >1us (起始) */
 			DS18B20_DATA_OUT(GPIO_PIN_RESET);
 			HAL_Delay_Us(2); 
 
             /* 释放 (写1) */
 			DS18B20_DATA_OUT(GPIO_PIN_SET);
-            
+            __enable_irq();
+
             /* 等待时隙结束 (至少60us) */
 			HAL_Delay_Us(60); 
 		}
 		else // 写0
 		{
+            __disable_irq();
             /* 拉低 (起始) */
 			DS18B20_DATA_OUT(GPIO_PIN_RESET);
             
@@ -156,7 +164,8 @@ void DS18B20_Write_Byte(uint8_t dat)
 
             /* 释放 */
 			DS18B20_DATA_OUT(GPIO_PIN_SET);
-            
+            __enable_irq();
+
             /* 恢复时间 >1us */
 			HAL_Delay_Us(2);
 		}

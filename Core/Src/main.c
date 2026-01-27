@@ -140,7 +140,6 @@ int main(void)
 
   // 初始化串口通信接收
   Comm_Init();
-
   printf("Sensors Initialization Finished.\r\n\r\n");
   /* USER CODE END 2 */
 
@@ -150,9 +149,6 @@ int main(void)
 
   while (1)
   {
-    // 非阻塞处理串口命令
-    Comm_Process_Rx_Command();
-
     // 周期性执行数据采集和发送 (间隔由 report_interval 控制)
     if (HAL_GetTick() - last_send_time >= report_interval)
     {
@@ -161,8 +157,9 @@ int main(void)
       // 1. 读取水质传感数据
       float ph_val = PH_Read_Median();
       float tds_val = TDS_Read_Corrected();
-      float turbidity_val = Turbidity_Read_NTU();
       float water_temp = DS18B20_Get_Temp();
+
+      float turbidity_val = Turbidity_Read_NTU(water_temp);
 
       // 2. 读取环境温湿度及气压数据
       uint32_t aht_data[2];
@@ -192,7 +189,8 @@ int main(void)
 
       // 4. 发送 JSON 数据到上位机 (USART2)
       Comm_Send_Sensor_Data(ph_val, tds_val, turbidity_val, water_temp, air_temp_bmp, air_hum, pressure, asl);
-
+      
+      // Comm_Send_Response("Active");
       /* USER CODE END WHILE */
 
       /* USER CODE BEGIN 3 */

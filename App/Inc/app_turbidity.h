@@ -10,6 +10,6 @@ void Turbidity_Init(ADC_HandleTypeDef *hadc);
 float Turbidity_Read_Voltage(void);
 
 // 读取浊度值 (NTU)
-float Turbidity_Read_NTU(void);
+float Turbidity_Read_NTU(float water_temp);
 
 #endif

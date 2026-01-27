@@ -8,8 +8,8 @@
 #define LOW   0
  
 #define DS18B20_CLK     RCC_APB2Periph_GPIOB
-#define DS18B20_PIN     GPIO_PIN_0                  
-#define DS18B20_PORT		GPIOB 
+#define DS18B20_PIN     GPIO_PIN_10                  
+#define DS18B20_PORT		GPIOC 
  
 //带参宏，可以像内联函数一样使用,输出高电平或低电平
 #define DS18B20_DATA_OUT(a)	HAL_GPIO_WritePin(DS18B20_PORT, DS18B20_PIN, a)
