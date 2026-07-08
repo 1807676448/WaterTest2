@@ -8,57 +8,18 @@
 // 全局变量定义
 uint32_t report_interval = 1500; // 默认5秒上报一次
 
-// 接收缓冲区
-static uint8_t rx_buffer[COMM_RX_BUFFER_SIZE];
-static uint8_t rx_byte;
-static uint16_t rx_index = 0;
-static uint8_t data_ready_flag = 0;
-
 // 外部引用串口句柄
 extern UART_HandleTypeDef huart2;
 
+// 外部引用静默标志 (定义在 main.c)
+extern volatile uint8_t tx_muted;
+
 void Comm_Init(void)
 {
-    // 启动接收中断，每次接收一个字节
-    HAL_UART_Receive_IT(COMM_UART_HANDLE, &rx_byte, 1);
+    // 初始化由 main.c 中的中断回调处理
 }
 
-// 串口接收中断回调处理
-// 注意：如果工程中其他地方也定义了此回调，需要合并逻辑
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    if (huart->Instance == USART2)
-    {
-        // 简单处理：收到换行符或缓冲区满视为一帧结束
-        // 兼容 \n 或 \r\n 或 } (JSON结束)
-        // 这里采用最简单的行缓冲机制，或者以 } 结尾判断
-        // 为了可靠性，单纯存入buffer，主循环解析。这里以 \n 作为结束符示例，实际JSON可能不带回车。
-        // 改进：一直累积直到 buffer 满或者特定结束条件。
-        // 假设命令以 \n 结束
 
-        if (rx_index < COMM_RX_BUFFER_SIZE - 1)
-        {
-            rx_buffer[rx_index++] = rx_byte;
-
-            // 收到换行符，标记接收完成
-            if (rx_byte == '\n')
-            {
-                rx_buffer[rx_index] = '\0';
-                data_ready_flag = 1;
-                // 注意：这里没有重置 rx_index，依靠主循环处理完后重置
-            }
-        }
-        else
-        {
-            // 溢出保护
-            rx_index = 0;
-            rx_buffer[rx_index++] = rx_byte;
-        }
-
-        // 继续接收
-        HAL_UART_Receive_IT(COMM_UART_HANDLE, &rx_byte, 1);
-    }
-}
 
 void Comm_Send_Sensor_Data(float ph, float tds, float turb, float w_temp, float a_temp, float a_hum, float pres, float asl)
 {
@@ -78,15 +39,19 @@ void Comm_Send_Sensor_Data(float ph, float tds, float turb, float w_temp, float 
 }
 
 // 辅助函数：发送简单的响应消息
+// 注意：调用前请确保 tx_muted == 0，否则数据不会被发送
 void Comm_Send_Response(const char *status)
 {
-    char tx_buffer[64];
-    int len;
-    len = snprintf(tx_buffer, sizeof(tx_buffer),
-                   "{\"device_id\":%d,\"status\":\"%s\"}\r\n",
-                   COMM_DEVICE_ID, status);
-    if (len > 0)
+    if (!tx_muted)
     {
-        HAL_UART_Transmit(COMM_UART_HANDLE, (uint8_t *)tx_buffer, (uint16_t)len, 1000);
+        char tx_buffer[64];
+        int len;
+        len = snprintf(tx_buffer, sizeof(tx_buffer),
+                       "{\"device_id\":%d,\"status\":\"%s\"}\r\n",
+                       COMM_DEVICE_ID, status);
+        if (len > 0)
+        {
+            HAL_UART_Transmit(COMM_UART_HANDLE, (uint8_t *)tx_buffer, (uint16_t)len, 1000);
+        }
     }
 }

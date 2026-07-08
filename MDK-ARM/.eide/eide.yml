@@ -96,6 +96,8 @@ targets:
       libList: []
     excludeList:
       - <virtual_root>/Application/User/App/app_hc14.c
+    settings:
+      debugger: cortex-debug
     toolchain: AC6
     toolchainConfigMap:
       AC5:
